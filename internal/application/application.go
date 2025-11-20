@@ -27,6 +27,7 @@ type BizFiles struct {
 	JSError        []byte
 	JSMain         []byte
 	JSLiveMain     []byte
+	JSP            []byte
 }
 
 type Biz struct {

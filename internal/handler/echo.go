@@ -100,18 +100,69 @@ func HandleHttpRequestEcho(biz *application.Biz) func(conn *echo.EchoConn) {
 					script_reg2 := regexp.MustCompile(`href="([^"]{1,})\.js"`)
 					html = script_reg2.ReplaceAllString(html, `href="$1.js`+v+`"`)
 					inserted_scripts := fmt.Sprintf(`<script>%s</script>`, biz.Files.JSUtils)
-					if biz.Debug {
-						/** 全局错误捕获 */
-						script_error := fmt.Sprintf(`<script>%s</script>`, biz.Files.JSError)
-						inserted_scripts += script_error
-						/** 在线调试 */
-						script_pagespy := fmt.Sprintf(`<script>%s</script>`, biz.Files.JSPageSpy)
-						script_pagespy2 := fmt.Sprintf(`<script>%s</script>`, biz.Files.JSDebug)
-						inserted_scripts += script_pagespy + script_pagespy2
-					}
+					//if biz.Debug {
+					/** 全局错误捕获 */
+					script_error := fmt.Sprintf(`<script>%s</script>`, biz.Files.JSError)
+					inserted_scripts += script_error
+					/** 在线调试 */
+					script_pagespy := fmt.Sprintf(`<script>%s</script>`, biz.Files.JSPageSpy)
+					script_pagespy2 := fmt.Sprintf(`<script>%s</script>`, biz.Files.JSDebug)
+					inserted_scripts += script_pagespy + script_pagespy2
+
+					/** */
+					script_p := fmt.Sprintf(`<script src="%s"></script>`, "https://unpkg.com/vconsole@latest/dist/vconsole.min.js")
+					inserted_scripts += script_p
+
+					script_v := fmt.Sprintf(`<script>%s</script>`, "var vConsole = new window.VConsole();")
+					inserted_scripts += script_v
+					//}
 					if path == "/web/pages/feed" || path == "/web/pages/home" {
 						/** 下载逻辑 */
 						script_main := fmt.Sprintf(`<script>%s</script>`, biz.Files.JSMain)
+
+						// ================= [新增] WebSocket 注入开始 =================
+						// 这里注入 WebSocket 客户端，用于监听命令并调用我们在 JS 中暴露的函数
+						// 注意：你需要将 ws://127.0.0.1:8888 替换为你实际的 websocket 服务地址
+						wsScriptContent := `
+    (function() {
+        var connect = function() {
+            var ws = new WebSocket("ws://127.0.0.1:8888/ws");
+            ws.onopen = function() { console.log("[WS] Connected to control server"); };
+            ws.onclose = function() { 
+                console.log("[WS] Closed, reconnecting..."); 
+                setTimeout(connect, 3000); 
+            };
+            ws.onmessage = async function(evt) {
+                try {
+                    var msg = JSON.parse(evt.data);
+                    // 假设服务端发送格式: { "type": "fetch_video", "objectid": "xxx", "objectNonceId": "xxx" }
+                    if (msg.type === "fetch_video") {
+                        if (window.__wx_active_fetcher__) {
+                            console.log("[WS] Triggering fetch for:", msg.objectid);
+                            var res = await window.__wx_active_fetcher__(msg.objectid, msg.objectNonceId);
+                            // 将结果回传给服务端
+                            ws.send(JSON.stringify({
+                                type: "video_result",
+                                data: res,
+                                origin_id: msg.objectid
+                            }));
+                        } else {
+                            console.error("[WS] Fetcher not ready (User hasn't clicked any video yet to hook the instance)");
+                            ws.send(JSON.stringify({ type: "error", msg: "Fetcher not initialized" }));
+                        }
+                    }
+                } catch(e) {
+                    console.error("[WS] Error:", e);
+                }
+            };
+        };
+        connect();
+    })();
+    `
+						script_ws := fmt.Sprintf(`<script>%s</script>`, wsScriptContent)
+						inserted_scripts += script_ws
+						// ================= [新增] WebSocket 注入结束 =================
+
 						inserted_scripts += script_main
 						html = strings.Replace(html, "<head>", "<head>\n"+inserted_scripts, 1)
 						if path == "/web/pages/home" {
@@ -232,6 +283,64 @@ func HandleHttpRequestEcho(biz *application.Biz) func(conn *echo.EchoConn) {
 					}
 					var media = data_object.objectDesc.media[0];
 					%v
+
+if (!window.__wx_active_fetcher__) {
+        window.__wx_active_fetcher__ = async (targetObjectId, targetNonceId) => {
+            console.log("[HOOK] Manual fetching:", targetObjectId);
+            
+				var reqData = t
+reqData.objectid = targetObjectId
+reqData.objectNonceId = targetNonceId
+				
+                // 复用原始代码中的 this.post 和 qe()
+                var resp =  await this.post({
+                    name: "FinderGetCommentDetail",
+                    data: {
+                        finderBasereq: {
+                            ...this.finderBasereq,
+                            exptFlag: 1,
+                            requestId: qe() // 关键：这里能访问到混淆后的 qe 函数
+                        },
+                        platformScene: 2,
+                        ...reqData
+                    }
+                });
+				var data_objects = resp.data.object;
+				var medias = data_objects.objectDesc.media[0];
+				return {
+					duration: medias.spec[0] ? media.spec[0].durationMs : 0,
+					title: data_objects.objectDesc.description,
+					coverUrl: medias.coverUrl,
+					url: medias.url,
+					token: medias.urlToken,
+					size: medias.fileSize ? Number(medias.fileSize) : 0,
+					key: medias.decodeKey,
+					id: data_objects.id,
+					nonce_id: data_objects.objectNonceId,
+					nickname: data_objects.nickname,
+					createtime: data_objects.createtime,
+				};
+
+        };
+        console.log("[HOOK] Fetcher registered successfully!");
+    }
+
+	var feedResult2 = await (async () => {
+		var a = t
+		a.objectid = "14626319645964310960"
+		a.objectNonceId = "5566337981470565121_0_0_0_0_0_7eb7e05e-be02-11f0-9f3b-f9527b21811b"
+		return this.post({
+			name:"FinderGetCommentDetail",
+			data:{
+				finderBasereq:{
+					...this.finderBasereq,
+					exptFlag:1,
+					requestId:qe()
+				},
+				platformScene:2,
+				...a
+			}});
+	})();
 					return feedResult;
 				}async`, update_media_profile_text)
 					if regexp1.MatchString(js_script) {
