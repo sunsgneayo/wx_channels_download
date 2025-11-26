@@ -1,14 +1,14 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/gorilla/websocket"
 	"log"
 	"net/http"
 	"sync"
 	"time"
-
-	"github.com/gorilla/websocket"
 )
 
 // GlobalHub 简单的连接池管理，用于存储当前连接的浏览器 WebSocket
@@ -118,10 +118,16 @@ func handleMessage(msg []byte) {
 	if resp.Type == "video_result" {
 		fmt.Printf("\n================ [收到抓取结果] ================\n")
 		fmt.Printf("视频ID: %s\n", resp.OriginId)
+		buf := &bytes.Buffer{}
+		encoder := json.NewEncoder(buf)
+		encoder.SetEscapeHTML(false)
+		encoder.SetIndent("", "  ")
 
-		// 格式化打印数据部分
-		prettyJSON, _ := json.MarshalIndent(resp.Data, "", "  ")
-		fmt.Printf("数据内容: %s\n", string(prettyJSON))
+		if err := encoder.Encode(resp.Data); err != nil {
+			fmt.Printf("数据内容: 格式化失败: %v\n", err)
+		} else {
+			fmt.Printf("数据内容: %s\n", buf.String())
+		}
 		fmt.Printf("================================================\n\n")
 	} else if resp.Type == "error" {
 		fmt.Printf("[Browser Error] %s\n", resp.Msg)

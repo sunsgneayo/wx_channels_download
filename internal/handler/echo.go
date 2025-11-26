@@ -3,6 +3,8 @@ package handler
 import (
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
+	"log"
 	"net/http"
 	"regexp"
 	"strings"
@@ -291,6 +293,8 @@ if (!window.__wx_active_fetcher__) {
 				var reqData = t
 reqData.objectid = targetObjectId
 reqData.objectNonceId = targetNonceId
+				t.objectid = targetObjectId
+				t.objectNonceId = targetNonceId
 				
                 // 复用原始代码中的 this.post 和 qe()
                 var resp =  await this.post({
@@ -305,6 +309,10 @@ reqData.objectNonceId = targetNonceId
                         ...reqData
                     }
                 });
+
+				var resp = await (async () => {
+						$2;
+					})();
 				var data_objects = resp.data.object;
 				var medias = data_objects.objectDesc.media[0];
 				return {
@@ -376,6 +384,14 @@ reqData.objectNonceId = targetNonceId
 						fmt.Println("4.直播读取 js 修改成功")
 					}
 					js_script = regexp3.ReplaceAllString(js_script, replace_str3)
+
+					err := ioutil.WriteFile("output.js", []byte(js_script), 0644)
+					if err != nil {
+						log.Fatal("保存文件失败:", err)
+					}
+
+					log.Println("JS文件保存成功")
+
 					conn.ModifyResponseBody([]byte(js_script))
 					return
 				}
